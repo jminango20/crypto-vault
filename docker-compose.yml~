@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cryptovault-postgres
+    environment:
+      POSTGRES_DB: cryptovault
+      POSTGRES_USER: cryptovault
+      POSTGRES_PASSWORD: cryptovault123
+    ports:
+      - "5432:5432"
+    volumes:
+      - cryptovault_data:/var/lib/postgresql/data
+    networks:
+      - cryptovault-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: cryptovault-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@cryptovault.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - cryptovault-network
+
+volumes:
+  cryptovault_data:
+
+networks:
+  cryptovault-network:
+    driver: bridge
