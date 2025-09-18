@@ -37,6 +37,7 @@ dependencies {
 
 	// Web3j - Para interação com Ethereum
 	implementation("org.web3j:core:4.10.3")
+	implementation("org.web3j:crypto:4.10.3")
 
 	// JWT para tokens
 	implementation("io.jsonwebtoken:jjwt-api:0.12.3")
@@ -50,6 +51,15 @@ dependencies {
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.security:spring-security-test")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:5.1.0")
+
+	// Web3j com suporte HD Wallet
+	implementation("org.web3j:core:4.10.3")
+	implementation("org.web3j:crypto:4.10.3")
+
+	// Bouncy Castle
+	implementation("org.bouncycastle:bcprov-jdk15on:1.70")
+
+	implementation("org.springframework.security:spring-security-crypto:6.2.0")
 }
 
 tasks.withType<KotlinCompile> {
