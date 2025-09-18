@@ -1,0 +1,51 @@
+import base64
+import os
+from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+# Gera 32 bytes aleatórios e codifica em Base64 (PRIMEIRO PASSO)
+#openssl rand -base64 32
+
+password = b"sua-senha-forte-aqui"  #
+
+# MASTER SEED (em Base64)
+master_seed_b64 = "wDiLiVrL+3nwR/8ttEwUWT/c0pNj8JKNxJsiZenzQpM="
+master_seed = base64.b64decode(master_seed_b64)
+
+# Salt fixo
+salt = b"CryptoVault-MasterSeed-Salt-2025"
+
+# Derivar chave
+kdf = PBKDF2HMAC(
+    algorithm=hashes.SHA256(),
+    length=32,
+    salt=salt,
+    iterations=100_000,
+)
+key = kdf.derive(password)
+
+# Gerar IV
+iv = os.urandom(16)
+
+# Criptografar
+cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+encryptor = cipher.encryptor()
+
+# Padding PKCS7
+padder = padding.PKCS7(128).padder()
+padded_data = padder.update(master_seed) + padder.finalize()
+
+encrypted = encryptor.update(padded_data) + encryptor.finalize()
+
+# Combinar IV + dados
+combined = iv + encrypted
+
+# Codificar
+encrypted_b64 = base64.b64encode(combined).decode('utf-8')
+result = f"ENC:{encrypted_b64}"
+
+print("✅ MASTER_SEED para .env:")
+print(result)
+print("\n✅ MASTER_PASSWORD para .env:")
+print(password.decode('utf-8'))
