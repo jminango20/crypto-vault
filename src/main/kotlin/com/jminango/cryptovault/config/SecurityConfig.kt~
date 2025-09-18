@@ -1,0 +1,4 @@
+package com.jminango.cryptovault.config
+
+class SecurityConfig {
+}
