@@ -41,11 +41,16 @@ server:
 cryptovault:
   version: 1.0.0
   security:
+    enable-address-validation: true
+    max-derivation-attempts: 10
     jwt:
       secret: ${JWT_SECRET:your-256-bit-secret-your-256-bit-secret}
       expiration: 86400000 # 24 hours
   master:
-    seed: ${MASTER_SEED:development-seed-change-in-production}
+    seed: ${MASTER_SEED:development-seed-not-for-production}
+    password: ${MASTER_PASSWORD:change-me-in-production}
+  encryption:
+    password: ${ENCRYPTION_PASSWORD:another-secret-password}
   blockchain:
     rpc-url: ${BLOCKCHAIN_RPC:http://localhost:8545}
     chain-id: ${CHAIN_ID:1337}
