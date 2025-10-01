@@ -20,9 +20,13 @@ class CryptoService(
     /**
      * Deriva chave privada HD (BIP-44)
      */
-    fun derivePrivateKeyHD(userId: String, walletIndex: Int = 0): ECKeyPair {
+    fun derivePrivateKeyHD(
+        userId: String,
+        walletIndex: Int = 0,
+        salt: String
+    ): ECKeyPair {
         try {
-            val userEntropy = generateUserEntropy(userId)
+            val userEntropy = generateUserEntropy(userId, salt)
 
             val mnemonic = MnemonicUtils.generateMnemonic(userEntropy)
 
@@ -44,7 +48,7 @@ class CryptoService(
             // Validar chave
             if (!isValidPrivateKey(childKeyPair.privateKey)) {
                 logger.warn { "Invalid key for user $userId, retrying with index ${walletIndex + 1}" }
-                return derivePrivateKeyHD(userId, walletIndex + 1)
+                return derivePrivateKeyHD(userId, walletIndex + 1, salt)
             }
 
             logger.debug { "HD wallet derived for user: $userId, index: $walletIndex" }
@@ -59,9 +63,9 @@ class CryptoService(
     /**
      * Gera entropia determinística para usuário
      */
-    private fun generateUserEntropy(userId: String): ByteArray {
+    private fun generateUserEntropy(userId: String, salt: String): ByteArray {
         val seedBytes = masterSeed.getBytes()
-        val combined = seedBytes + userId.toByteArray()
+        val combined = seedBytes + userId.toByteArray() + salt.toByteArray()
 
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(combined)

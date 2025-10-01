@@ -1,5 +1,6 @@
 package com.jminango.cryptovault.controller
 
+import com.jminango.cryptovault.annotation.RateLimit
 import com.jminango.cryptovault.dto.*
 import com.jminango.cryptovault.service.WalletService
 import mu.KotlinLogging
@@ -17,6 +18,7 @@ class WalletController(
 ) {
 
     @PostMapping("/wallet/create")
+    @RateLimit(maxRequests = 5, durationSeconds = 60)
     fun createWallet(@RequestBody request: CreateWalletRequest): ResponseEntity<ApiResponse<WalletResponse>> {
         return try {
             val wallet = walletService.createWallet(request)
@@ -53,6 +55,7 @@ class WalletController(
     }
 
     @PostMapping("/transaction/sign")
+    @RateLimit(maxRequests = 10, durationSeconds = 60)
     fun signTransaction(@RequestBody request: SignTransactionRequest): ResponseEntity<ApiResponse<SignTransactionResponse>> {
         return try {
             val signed = walletService.signTransaction(request)

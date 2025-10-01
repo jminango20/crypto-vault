@@ -45,13 +45,29 @@ class WalletService(
             )
         }
 
+        val derivationSalt = generateSecureRandomSalt()
+
         // Gerar HD wallet
         val walletIndex = 0
-        val keyPair = cryptoService.derivePrivateKeyHD(request.userId, walletIndex)
+        val keyPair = cryptoService.derivePrivateKeyHD(
+            userId = request.userId,
+            walletIndex = walletIndex,
+            salt = derivationSalt
+        )
         val credentials = Credentials.create(keyPair)
 
+        val privateKeyHex = keyPair.privateKey.toString(16).padStart(64, '0')
+        val privateKeyForEthereum = "0x$privateKeyHex"
+
+        println("*********************************")
+        println("*********************************")
+        println(privateKeyForEthereum)
+        println("*********************************")
+        println("*********************************")
+
+
         // Criptografar informação de derivação
-        val derivationInfo = "${request.userId}:$walletIndex"
+        val derivationInfo = "${request.userId}:$walletIndex:$derivationSalt"
         val encryptedPath = encryptionService.encrypt(derivationInfo)
 
         // Salvar wallet
@@ -60,6 +76,7 @@ class WalletService(
             address = credentials.address,
             walletIndex = walletIndex,
             derivationPath = encryptedPath,
+            derivationSalt = derivationSalt,
             network = request.network
         )
 
@@ -99,9 +116,14 @@ class WalletService(
         val parts = derivationInfo.split(":")
         val userId = parts[0]
         val walletIndex = parts[1].toInt()
+        val derivationSalt = parts[2]
 
         // Re-derivar a chave (determinística)
-        val keyPair = cryptoService.derivePrivateKeyHD(userId, walletIndex)
+        val keyPair = cryptoService.derivePrivateKeyHD(
+            userId = userId,
+            walletIndex = walletIndex,
+            salt = derivationSalt
+        )
         val credentials = Credentials.create(keyPair)
 
         // Validação de segurança
@@ -153,5 +175,12 @@ class WalletService(
             logger.error(e) { "Failed to get nonce" }
             BigInteger.ZERO
         }
+    }
+
+    private fun generateSecureRandomSalt(): String {
+        val random = java.security.SecureRandom()
+        val bytes = ByteArray(32)
+        random.nextBytes(bytes)
+        return java.util.Base64.getEncoder().encodeToString(bytes)
     }
 }

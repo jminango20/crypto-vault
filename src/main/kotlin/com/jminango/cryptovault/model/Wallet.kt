@@ -23,6 +23,9 @@ data class Wallet(
     @Column(name = "derivation_path", nullable = false)
     val derivationPath: String,
 
+    @Column(name = "derivation_salt", nullable = false)
+    val derivationSalt: String,
+
     @Column(nullable = false)
     val network: String = "Besu",
 
