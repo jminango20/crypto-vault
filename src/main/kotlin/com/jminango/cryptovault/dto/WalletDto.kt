@@ -19,8 +19,9 @@ data class SignTransactionRequest(
     val to: String,
     val data: String? = null,
     val value: String? = null,
-    val nonce: Long? = null,
-    val gasLimit: Long? = null
+    val nonce: Long,
+    val gasLimit: Long? = null,
+    val gasPrice: Long? = null
 )
 
 data class SignTransactionResponse(
@@ -36,4 +37,10 @@ data class ApiResponse<T>(
     val data: T? = null,
     val error: String? = null,
     val timestamp: LocalDateTime = LocalDateTime.now()
+)
+
+data class WalletAddressResponse(
+    val userId: String,
+    val address: String,
+    val network: String
 )

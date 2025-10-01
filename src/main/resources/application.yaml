@@ -57,6 +57,11 @@ cryptovault:
     gas-price: 0
     gas-limit: 6000000
 
+  signing:
+    chain-id: ${CHAIN_ID:1337}
+    gas-price: ${GAS_PRICE:20000000000}
+    gas-limit: ${GAS_LIMIT:6721975}
+
 management:
   endpoints:
     web:

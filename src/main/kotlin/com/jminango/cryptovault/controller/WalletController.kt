@@ -4,7 +4,6 @@ import com.jminango.cryptovault.annotation.RateLimit
 import com.jminango.cryptovault.dto.*
 import com.jminango.cryptovault.service.WalletService
 import mu.KotlinLogging
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -20,57 +19,40 @@ class WalletController(
     @PostMapping("/wallet/create")
     @RateLimit(maxRequests = 5, durationSeconds = 60)
     fun createWallet(@RequestBody request: CreateWalletRequest): ResponseEntity<ApiResponse<WalletResponse>> {
-        return try {
-            val wallet = walletService.createWallet(request)
-            ResponseEntity.ok(ApiResponse(
-                success = true,
-                data = wallet
-            ))
-        } catch (e: Exception) {
-            logger.error(e) { "Error creating wallet" }
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse(
-                    success = false,
-                    error = e.message
-                ))
-        }
+        val wallet = walletService.createWallet(request)
+        return ResponseEntity.ok(ApiResponse(
+            success = true,
+            data = wallet
+        ))
     }
-
 
     @GetMapping("/wallet/{userId}")
     fun getWallet(@PathVariable userId: String): ResponseEntity<ApiResponse<WalletResponse>> {
         val wallet = walletService.getWallet(userId)
-        return if (wallet != null) {
-            ResponseEntity.ok(ApiResponse(
-                success = true,
-                data = wallet
-            ))
-        } else {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse(
-                    success = false,
-                    error = "Wallet not found"
-                ))
-        }
+        return ResponseEntity.ok(ApiResponse(
+            success = true,
+            data = wallet
+        ))
+    }
+
+    @GetMapping("/wallet/{userId}/address")
+    @RateLimit(maxRequests = 30, durationSeconds = 60)
+    fun getWalletAddress(@PathVariable userId: String): ResponseEntity<ApiResponse<WalletAddressResponse>> {
+        val addressInfo = walletService.getWalletAddress(userId)
+        return ResponseEntity.ok(ApiResponse(
+            success = true,
+            data = addressInfo
+        ))
     }
 
     @PostMapping("/transaction/sign")
     @RateLimit(maxRequests = 10, durationSeconds = 60)
     fun signTransaction(@RequestBody request: SignTransactionRequest): ResponseEntity<ApiResponse<SignTransactionResponse>> {
-        return try {
-            val signed = walletService.signTransaction(request)
-            ResponseEntity.ok(ApiResponse(
-                success = true,
-                data = signed
-            ))
-        } catch (e: Exception) {
-            logger.error(e) { "Error signing transaction" }
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse(
-                    success = false,
-                    error = e.message
-                ))
-        }
+        val signed = walletService.signTransaction(request)
+        return ResponseEntity.ok(ApiResponse(
+            success = true,
+            data = signed
+        ))
     }
 
     @GetMapping("/health")
