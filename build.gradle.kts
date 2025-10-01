@@ -60,6 +60,11 @@ dependencies {
 	implementation("org.bouncycastle:bcprov-jdk15on:1.70")
 
 	implementation("org.springframework.security:spring-security-crypto:6.2.0")
+
+	// Bucket for Rate Limiting
+	implementation("com.bucket4j:bucket4j-core:8.7.0")
+	implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+	implementation("javax.cache:cache-api:1.1.1")
 }
 
 tasks.withType<KotlinCompile> {
