@@ -1,0 +1,4 @@
+package com.jminango.cryptovault.security
+
+class CustomUserDetailsService {
+}

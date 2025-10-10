@@ -1,0 +1,9 @@
+package com.jminango.cryptovault.utils
+
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
+
+fun main() {
+    val encoder = BCryptPasswordEncoder()
+    val hash = encoder.encode("password123")
+    println("Hash: $hash")
+}
