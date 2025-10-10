@@ -16,6 +16,9 @@ class WebConfig(
     override fun addInterceptors(registry: InterceptorRegistry) {
         registry.addInterceptor(rateLimitInterceptor)
             .addPathPatterns("/api/v1/**")        // Aplicar em todos endpoints /api/v1
-            .excludePathPatterns("/api/v1/health") // Exceto o health check
+            .excludePathPatterns(
+                "/api/v1/health",
+                "/api/v1/auth/**"
+            )
     }
 }

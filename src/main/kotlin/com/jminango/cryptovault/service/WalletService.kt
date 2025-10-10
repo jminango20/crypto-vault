@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.web3j.crypto.*
-import org.web3j.protocol.core.DefaultBlockParameterName
 import org.web3j.utils.Numeric
 import java.math.BigInteger
 
@@ -20,14 +19,23 @@ class WalletService(
     private val walletRepository: WalletRepository,
     private val cryptoService: CryptoService,        // Para HD wallets
     private val encryptionService: EncryptionService, // Para criptografar dados
-    @Value("\${cryptovault.blockchain.chain-id}") private val chainId: Long,
-    @Value("\${cryptovault.blockchain.gas-price}") private val gasPrice: Long,
-    @Value("\${cryptovault.blockchain.gas-limit}") private val gasLimit: Long
+    @Value("\${cryptovault.signing.chain-id}") private val chainId: Long,
+    @Value("\${cryptovault.signing.gas-price}") private val gasPrice: Long,
+    @Value("\${cryptovault.signing.gas-limit}") private val gasLimit: Long
 ) {
 
     @Transactional
-    fun createWallet(request: CreateWalletRequest): WalletResponse {
+    fun createWallet(request: CreateWalletRequest, authenticatedUsername: String): WalletResponse {
         logger.info { "Creating wallet for user: ${request.userId}" }
+
+        if (request.userId != authenticatedUsername) {
+            logger.warn {
+                "User $authenticatedUsername tried to create wallet for ${request.userId}"
+            }
+            throw ValidationException(
+                mapOf("userId" to "You just can create your own wallet")
+            )
+        }
 
         // Verificar se já existe
         val existingWallet = walletRepository.findByUserId(request.userId)
