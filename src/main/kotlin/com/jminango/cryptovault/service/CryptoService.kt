@@ -17,16 +17,27 @@ class CryptoService(
     private val masterSeed: MasterSeed // Injetado pelo Spring
 ) {
 
+    companion object {
+        private const val SALT_DERIVATION_CONSTANT = "SALT_DERIVATION_V1"
+
+        private val SECP256K1_N = BigInteger(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+            16
+        )
+    }
+
     /**
      * Deriva chave privada HD (BIP-44)
      */
     fun derivePrivateKeyHD(
         userId: String,
-        walletIndex: Int = 0,
-        salt: String
+        walletIndex: Int = 0
     ): ECKeyPair {
         try {
-            val userEntropy = generateUserEntropy(userId, salt)
+
+            val salt = deriveUserSalt(userId)
+
+            val userEntropy = generateUserEntropy(userId, salt.toString())
 
             val mnemonic = MnemonicUtils.generateMnemonic(userEntropy)
 
@@ -48,7 +59,7 @@ class CryptoService(
             // Validar chave
             if (!isValidPrivateKey(childKeyPair.privateKey)) {
                 logger.warn { "Invalid key for user $userId, retrying with index ${walletIndex + 1}" }
-                return derivePrivateKeyHD(userId, walletIndex + 1, salt)
+                return derivePrivateKeyHD(userId, walletIndex + 1)
             }
 
             logger.debug { "HD wallet derived for user: $userId, index: $walletIndex" }
@@ -65,7 +76,7 @@ class CryptoService(
      */
     private fun generateUserEntropy(userId: String, salt: String): ByteArray {
         val seedBytes = masterSeed.getBytes()
-        val combined = seedBytes + userId.toByteArray() + salt.toByteArray()
+        val combined = seedBytes + userId.toByteArray(Charsets.UTF_8) + salt.toByteArray()
 
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(combined)
@@ -79,7 +90,20 @@ class CryptoService(
      */
     private fun isValidPrivateKey(privateKey: BigInteger): Boolean {
         // Ordem da curva secp256k1
-        val n = BigInteger("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16)
-        return privateKey > BigInteger.ZERO && privateKey < n
+        return privateKey > BigInteger.ZERO && privateKey < SECP256K1_N
+    }
+
+    /**
+     * Derivar um salt deterministico
+     */
+    private fun deriveUserSalt(userId: String): ByteArray {
+        val seedBytes = masterSeed.getBytes()
+
+        val input = seedBytes +
+                    userId.toByteArray(Charsets.UTF_8) +
+                    SALT_DERIVATION_CONSTANT.toByteArray(Charsets.UTF_8)
+
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        return digest.digest(input)
     }
 }

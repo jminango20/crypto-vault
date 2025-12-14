@@ -21,34 +21,34 @@ class AuthService(
     private val jwtService: JwtService
 ) {
 
+    private val dummyPasswordHash = passwordEncoder.encode("dummy-password-for-timing-attack-prevention")
+
     fun login(request: LoginRequest): LoginResponse {
         logger.info { "Tentativa de login: ${request.username}" }
 
-        // 1. Buscar usuário no banco
-        val user = userRepository.findByUsername(request.username)
-            .orElseThrow {
-                logger.warn { "User not found: ${request.username}" }
-                ValidationException(mapOf("username" to "User or password incorrect"))
-            }
+        // Buscar usuário no banco
+        val user = userRepository.findByUsername(request.username).orElse(null)
 
-        // 2. Verificar se a senha está correta
-        if (!passwordEncoder.matches(request.password, user.password)) {
-            logger.warn { "Password incorrect: ${request.username}" }
-            throw ValidationException(mapOf("password" to "User or password incorrect"))
+        val passwordHash = user?.password ?: dummyPasswordHash
+
+        val passwordMatches = passwordEncoder.matches(request.password, passwordHash)
+
+        val isValid = user != null && passwordMatches && user.enabled
+
+        if (!isValid) {
+            logger.warn { "Failed login attempt for username: ${request.username}" }
+
+            throw ValidationException(
+                mapOf("credentials" to "Invalid username or password")
+            )
         }
 
-        // 3. Verificar se usuário está ativo
-        if (!user.enabled) {
-            logger.warn { "User disabled: ${request.username}" }
-            throw ValidationException(mapOf("username" to "User disabled"))
-        }
+        // Gerar token JWT
+        val token = jwtService.generateToken(user!!.username)
 
-        // 4. Gerar token JWT
-        val token = jwtService.generateToken(user.username)
+        logger.info { "Login successful for user: ${user.username}" }
 
-        logger.info { "Login successful: ${request.username}" }
-
-        // 5. Retornar token
+        // Retornar token
         return LoginResponse(
             token = token,
             username = user.username,
@@ -108,7 +108,6 @@ class AuthService(
             false
         }
     }
-
 
     fun getUsernameFromToken(token: String): String {
         return jwtService.getUsernameFromToken(token)

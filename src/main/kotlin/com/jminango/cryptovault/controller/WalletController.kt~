@@ -86,7 +86,14 @@ class WalletController(
 
     @PostMapping("/transaction/sign")
     @RateLimit(maxRequests = 10, durationSeconds = 60)
-    fun signTransaction(@RequestBody request: SignTransactionRequest): ResponseEntity<ApiResponse<SignTransactionResponse>> {
+    fun signTransaction(
+        @Valid @RequestBody request: SignTransactionRequest,
+        authentication: Authentication
+    ): ResponseEntity<ApiResponse<SignTransactionResponse>> {
+
+        val authenticatedUsername = authentication.name
+        logger.info { "User $authenticatedUsername is trying to sign a transaction" }
+
         val signed = walletService.signTransaction(request)
         return ResponseEntity.ok(ApiResponse(
             success = true,

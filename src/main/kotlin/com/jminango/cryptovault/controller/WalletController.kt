@@ -28,7 +28,6 @@ class WalletController(
 
         val authenticatedUsername = authentication.name
 
-
         val wallet = walletService.createWallet(request, authenticatedUsername)
 
         return ResponseEntity.ok(ApiResponse(
