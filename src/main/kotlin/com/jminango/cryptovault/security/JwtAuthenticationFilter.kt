@@ -14,11 +14,24 @@ import org.springframework.web.filter.OncePerRequestFilter
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Extracts and validates the JWT from every incoming request's Authorization header.
+ * On a valid token, populates the Spring Security context so downstream handlers
+ * can access the authenticated principal.
+ *
+ * Failures are intentionally non-fatal: the filter chain continues and Spring
+ * Security rejects the request at the authorization layer if authentication is required.
+ */
 @Component
 class JwtAuthenticationFilter(
     private val authService: AuthService,
     private val userDetailsService: UserDetailsService
 ) : OncePerRequestFilter() {
+
+    companion object {
+        private const val BEARER_PREFIX = "Bearer "
+        private const val AUTHORIZATION_HEADER = "Authorization"
+    }
 
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -26,43 +39,33 @@ class JwtAuthenticationFilter(
         filterChain: FilterChain
     ) {
         try {
-            val jwt = extractJwtFromRequest(request)
-
+            val jwt = extractJwt(request)
             if (jwt != null && authService.validateToken(jwt)) {
-
-                val username = authService.getUsernameFromToken(jwt)
-
-                logger.debug { "Token valid for user: $username" }
-
-                val userDetails = userDetailsService.loadUserByUsername(username)
-
-                val authentication = UsernamePasswordAuthenticationToken(
-                    userDetails,
-                    null,
-                    userDetails.authorities
-                )
-
-                authentication.details = WebAuthenticationDetailsSource().buildDetails(request)
-
-                SecurityContextHolder.getContext().authentication = authentication
-
-                logger.debug { "User authenticated: $username" }
+                authenticateUser(jwt, request)
             }
-
         } catch (e: Exception) {
-            logger.error("Error authenticating JWT", e)
+            logger.debug { "JWT processing failed for ${request.requestURI}: ${e.message}" }
         }
 
         filterChain.doFilter(request, response)
     }
 
-    private fun extractJwtFromRequest(request: HttpServletRequest): String? {
-        val bearerToken = request.getHeader("Authorization")
+    private fun authenticateUser(jwt: String, request: HttpServletRequest) {
+        val username = authService.getUsernameFromToken(jwt)
+        val userDetails = userDetailsService.loadUserByUsername(username)
 
-        return if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            bearerToken.substring(7)
-        } else {
-            null
-        }
+        val authentication = UsernamePasswordAuthenticationToken(
+            userDetails, null, userDetails.authorities
+        ).also { it.details = WebAuthenticationDetailsSource().buildDetails(request) }
+
+        SecurityContextHolder.getContext().authentication = authentication
+        logger.debug { "Authenticated user: $username (authorities: ${userDetails.authorities.joinToString()})" }
+    }
+
+    private fun extractJwt(request: HttpServletRequest): String? {
+        val bearerToken = request.getHeader(AUTHORIZATION_HEADER)
+        return if (bearerToken?.startsWith(BEARER_PREFIX) == true)
+            bearerToken.substring(BEARER_PREFIX.length).trim()
+        else null
     }
 }

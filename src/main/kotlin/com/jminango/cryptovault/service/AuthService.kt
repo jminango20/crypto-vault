@@ -21,34 +21,29 @@ class AuthService(
     private val jwtService: JwtService
 ) {
 
-    private val dummyPasswordHash = passwordEncoder.encode("dummy-password-for-timing-attack-prevention")
+    companion object {
+        // A pre-hashed dummy password ensures BCrypt runs even for unknown usernames,
+        // preventing timing-based username enumeration attacks.
+        private const val DUMMY_PASSWORD = "dummy-password-for-timing-attack-prevention"
+    }
+
+    private val dummyPasswordHash by lazy { passwordEncoder.encode(DUMMY_PASSWORD) }
 
     fun login(request: LoginRequest): LoginResponse {
-        logger.info { "Tentativa de login: ${request.username}" }
+        logger.info { "Login attempt for user: ${request.username}" }
 
-        // Buscar usuário no banco
         val user = userRepository.findByUsername(request.username).orElse(null)
-
         val passwordHash = user?.password ?: dummyPasswordHash
-
-        val passwordMatches = passwordEncoder.matches(request.password, passwordHash)
-
-        val isValid = user != null && passwordMatches && user.enabled
+        val isValid = user != null && passwordEncoder.matches(request.password, passwordHash) && user.enabled
 
         if (!isValid) {
             logger.warn { "Failed login attempt for username: ${request.username}" }
-
-            throw ValidationException(
-                mapOf("credentials" to "Invalid username or password")
-            )
+            throw ValidationException(mapOf("credentials" to "Invalid username or password"))
         }
 
-        // Gerar token JWT
         val token = jwtService.generateToken(user!!.username)
-
         logger.info { "Login successful for user: ${user.username}" }
 
-        // Retornar token
         return LoginResponse(
             token = token,
             username = user.username,
@@ -56,48 +51,32 @@ class AuthService(
         )
     }
 
-    /**
-     * Registra um novo usuário
-     */
     @Transactional
     fun register(request: RegisterRequest): RegisterResponse {
-        logger.info { "Register request: ${request.username}" }
+        logger.info { "Registration attempt for user: ${request.username}" }
 
-        // 1. Validar se username já existe
         if (userRepository.existsByUsername(request.username)) {
             logger.warn { "Username already exists: ${request.username}" }
             throw ValidationException(mapOf("username" to "Username already exists"))
         }
 
-        // 2. Validar se email já existe
         if (request.email != null && userRepository.existsByEmail(request.email)) {
             logger.warn { "Email already exists: ${request.email}" }
             throw ValidationException(mapOf("email" to "Email already exists"))
         }
 
-        // 3. Criptografar senha com BCrypt
-        val hashedPassword = passwordEncoder.encode(request.password)
-
-        logger.debug { "Password cryptographed: ${request.username}" }
-
-        // 4. Criar usuário
         val user = User(
             username = request.username,
-            password = hashedPassword,
+            password = passwordEncoder.encode(request.password),
             email = request.email,
             role = "USER",
             enabled = true
         )
 
-        // 5. Salvar no banco
         userRepository.save(user)
-
         logger.info { "User registered: ${request.username}" }
 
-        return RegisterResponse(
-            username = user.username,
-            message = "User registered successfully"
-        )
+        return RegisterResponse(username = user.username, message = "User registered successfully")
     }
 
     fun validateToken(token: String): Boolean {
@@ -109,7 +88,5 @@ class AuthService(
         }
     }
 
-    fun getUsernameFromToken(token: String): String {
-        return jwtService.getUsernameFromToken(token)
-    }
+    fun getUsernameFromToken(token: String): String = jwtService.getUsernameFromToken(token)
 }

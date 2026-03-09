@@ -11,90 +11,50 @@ import javax.crypto.SecretKey
 
 private val logger = KotlinLogging.logger {}
 
-/**
- * Serviço para gerar e validar tokens JWT
- */
 @Service
 class JwtService(
     @Value("\${cryptovault.jwt.secret}") private val jwtSecret: String,
-    @Value("\${cryptovault.jwt.expiration}") private val jwtExpiration: Long  // 24h em ms
+    @Value("\${cryptovault.jwt.expiration}") private val jwtExpiration: Long  // milliseconds
 ) {
 
     private val key: SecretKey
 
     init {
-        // Validar
         require(jwtSecret.length >= 32) {
-            "JWT secret deve ter no mínimo 32 caracteres! Atual: ${jwtSecret.length}"
+            "JWT secret must be at least 32 characters. Current length: ${jwtSecret.length}"
         }
-
-        // Criar chave
         key = Keys.hmacShaKeyFor(jwtSecret.toByteArray())
-        logger.info { "JwtService inicializado com sucesso!" }
+        logger.info { "JwtService initialized" }
     }
 
-    /**
-     * Gera um token JWT para um usuário
-     */
     fun generateToken(username: String): String {
         val now = Date()
-        val expiryDate = Date(now.time + jwtExpiration)
-
-        logger.debug { "Generanting token for user: $username" }
-
+        val expiry = Date(now.time + jwtExpiration)
+        logger.debug { "Generating JWT token for user: $username (expires: $expiry)" }
         return Jwts.builder()
-            .subject(username)  // Quem é o dono do token
-            .issuedAt(now)      // Quando foi criado
-            .expiration(expiryDate)  // Quando expira
-            .signWith(key)  // Assinar com chave secreta
+            .subject(username)
+            .issuedAt(now)
+            .expiration(expiry)
+            .signWith(key)
             .compact()
     }
 
-    /**
-     * Extrai o username do token
-     */
-    fun getUsernameFromToken(token: String): String {
-        val claims = getAllClaimsFromToken(token)
-        return claims.subject
-    }
+    fun getUsernameFromToken(token: String): String = getAllClaims(token).subject
 
-    /**
-     * Valida se o token é válido
-     */
     fun validateToken(token: String): Boolean {
         return try {
-            getAllClaimsFromToken(token)
-            logger.debug { "Valid token" }
+            getAllClaims(token)
             true
         } catch (e: Exception) {
-            logger.warn { "Invalid token: ${e.message}" }
+            logger.warn { "Token validation failed: ${e.javaClass.simpleName}" }
             false
         }
     }
 
-    /**
-     * Verifica se o token expirou
-     */
-    fun isTokenExpired(token: String): Boolean {
-        val claims = getAllClaimsFromToken(token)
-        return claims.expiration.before(Date())
-    }
+    fun isTokenExpired(token: String): Boolean = getAllClaims(token).expiration.before(Date())
 
-    /**
-     * Extrai todas as informações (claims) do token
-     */
-    private fun getAllClaimsFromToken(token: String): Claims {
-        return Jwts.parser()
-            .verifyWith(key)
-            .build()
-            .parseSignedClaims(token)
-            .payload
-    }
+    fun getExpirationInSeconds(): Long = jwtExpiration / 1000
 
-    /**
-     * Retorna tempo de expiração em segundos
-     */
-    fun getExpirationInSeconds(): Long {
-        return jwtExpiration / 1000
-    }
+    private fun getAllClaims(token: String): Claims =
+        Jwts.parser().verifyWith(key).build().parseSignedClaims(token).payload
 }
