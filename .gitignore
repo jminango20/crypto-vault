@@ -1,7 +1,12 @@
+### Build ###
 HELP.md
 .gradle
 build/
+target/
+out/
+*.jar
 !gradle/wrapper/gradle-wrapper.jar
+!gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 
@@ -41,3 +46,21 @@ out/
 
 ### Environment ###
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+credentials/
+
+### Logs ###
+logs/
+*.log
+
+### Temporary ###
+tmp/
+temp/
+
+### OS ###
+.DS_Store
+Thumbs.db
