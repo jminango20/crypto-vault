@@ -8,8 +8,10 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.ActiveProfiles
 
 @SpringBootTest
+@ActiveProfiles("test")
 class ArchitectureTest {
 
     @Autowired lateinit var cryptoService: CryptoService
@@ -30,7 +32,11 @@ class ArchitectureTest {
         assertNotNull(key1)
 
         // 3. WalletService usa ambos sem problemas
-        val wallet = walletService.createWallet(CreateWalletRequest("testuser"))
+        val testUser = "testuser"
+        val wallet = walletService.createWallet(
+            CreateWalletRequest("testuser"),
+            authenticatedUsername = testUser
+        )
         assertNotNull(wallet.address)
     }
 
