@@ -1,4 +1,0 @@
-package com.jminango.cryptovault.interceptor
-
-class RateLimitInterceptor {
-}
