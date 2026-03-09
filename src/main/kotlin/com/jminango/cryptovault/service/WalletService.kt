@@ -9,8 +9,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.web3j.crypto.*
-import org.web3j.utils.Numeric
-import java.math.BigInteger
 
 private val logger = KotlinLogging.logger {}
 
@@ -19,67 +17,66 @@ class WalletService(
     private val walletRepository: WalletRepository,
     private val cryptoService: CryptoService,        // Para HD wallets
     private val encryptionService: EncryptionService, // Para criptografar dados
-    @Value("\${cryptovault.signing.chain-id}") private val chainId: Long,
-    @Value("\${cryptovault.signing.gas-price}") private val gasPrice: Long,
-    @Value("\${cryptovault.signing.gas-limit}") private val gasLimit: Long
+    @Value("\${cryptovault.signing.chain.id}") private val chainId: Long,
+    @Value("\${cryptovault.signing.gas.price}") private val gasPrice: Long,
+    @Value("\${cryptovault.signing.gas.limit}") private val gasLimit: Long
 ) {
 
+    /**
+     * Create a wallet
+     */
     @Transactional
     fun createWallet(request: CreateWalletRequest, authenticatedUsername: String): WalletResponse {
-        logger.info { "Creating wallet for user: ${request.userId}" }
+        logger.info {
+            "Wallet creation request for user: ${request.userId} by: $authenticatedUsername"
+        }
 
+        // Validação de autorização
         if (request.userId != authenticatedUsername) {
             logger.warn {
-                "User $authenticatedUsername tried to create wallet for ${request.userId}"
+                "Unauthorized: $authenticatedUsername attempted to create wallet for ${request.userId}"
             }
             throw ValidationException(
-                mapOf("userId" to "You just can create your own wallet")
+                mapOf("userId" to "You can only create your own wallet")
             )
         }
 
         // Verificar se já existe
-        val existingWallet = walletRepository.findByUserId(request.userId)
-        if (existingWallet.isPresent) {
+        if (walletRepository.findByUserId(request.userId).isPresent) {
+            logger.warn { "Wallet already exists for user: ${request.userId}" }
             throw WalletAlreadyExistsException(request.userId)
         }
 
         try {
+            // Assign next global sequential index: MAX(walletIndex) + 1, or 0 for the first wallet
+            val nextIndex = walletRepository.findMaxWalletIndex() + 1
 
-            // Gerar HD wallet
-            val walletIndex = 0
-            val keyPair = cryptoService.derivePrivateKeyHD(
-                userId = request.userId,
-                walletIndex = walletIndex
-            )
+            // Derive HD wallet from master seed at the sequential index
+            val keyPair = cryptoService.derivePrivateKeyHD(walletIndex = nextIndex)
             val credentials = Credentials.create(keyPair)
 
-            /*
-            val privateKeyHex = keyPair.privateKey.toString(16).padStart(64, '0')
-            val privateKeyForEthereum = "0x$privateKeyHex"
-
-            //TODO REMOVER
-            println("*********************************")
-            println("*********************************")
-            println(privateKeyForEthereum)
-            println("*********************************")
-            println("*********************************")
-            */
-
-            // Criptografar informação de derivação
-            val derivationInfo = "${request.userId}:$walletIndex"
-            val encryptedPath = encryptionService.encrypt(derivationInfo)
+            // Encrypt only the derivation index; userId is bound as AAD so swapping
+            // this ciphertext into another user's record causes decryption to fail.
+            val encryptedPath = encryptionService.encrypt(
+                nextIndex.toString(),
+                aad = request.userId
+            )
 
             // Salvar wallet
             val wallet = Wallet(
                 userId = request.userId,
                 address = credentials.address,
-                walletIndex = walletIndex,
+                walletIndex = nextIndex,
                 derivationPath = encryptedPath,
                 network = request.network
             )
 
             val saved = walletRepository.save(wallet)
-            logger.info { "Wallet created: ${saved.address}" }
+
+            logger.info {
+                "Wallet created successfully - userId: ${saved.userId}, address: ${saved.address}"
+            }
+
 
             return WalletResponse(
                 userId = saved.userId,
@@ -88,17 +85,25 @@ class WalletService(
                 createdAt = saved.createdAt
             )
 
+        } catch (e: CryptoVaultException) {
+            throw e
         } catch (e: Exception) {
-            logger.error(e) { "Failed to create wallet" }
+            logger.error(e) { "Unexpected error creating wallet for user: ${request.userId}" }
             throw KeyDerivationException("Failed to create wallet", e)
         }
     }
 
+    /**
+     * Get a wallet
+     */
     fun getWallet(userId: String): WalletResponse {
-        logger.info { "Fetching wallet for user: $userId" }
+        logger.debug { "Fetching wallet details for user: $userId" }
 
         val wallet = walletRepository.findByUserId(userId)
-            .orElseThrow { WalletNotFoundException(userId) }
+            .orElseThrow {
+                logger.warn { "Wallet not found for user: $userId" }
+                WalletNotFoundException(userId)
+            }
 
         return WalletResponse(
             userId = wallet.userId,
@@ -108,94 +113,22 @@ class WalletService(
         )
     }
 
+    /**
+     * Get wallet address
+     */
     fun getWalletAddress(userId: String): WalletAddressResponse {
-        logger.info { "Fetching wallet address for user: $userId" }
+        logger.debug { "Fetching wallet address for user: $userId" }
 
         val wallet = walletRepository.findByUserId(userId)
-            .orElseThrow { WalletNotFoundException(userId) }
+            .orElseThrow {
+                logger.warn { "Wallet not found for user: $userId" }
+                WalletNotFoundException(userId)
+            }
 
         return WalletAddressResponse(
             userId = wallet.userId,
             address = wallet.address,
             network = wallet.network
         )
-    }
-
-    fun signTransaction(request: SignTransactionRequest): SignTransactionResponse {
-        logger.info { "Signing transaction from ${request.from} to ${request.to}" }
-
-        val wallet = walletRepository.findByAddress(request.from)
-            .orElseThrow { WalletNotFoundException(request.from) }
-
-        try {
-
-            // Descriptografar informação de derivação
-            val derivationInfo = encryptionService.decrypt(wallet.derivationPath)
-            val parts = derivationInfo.split(":")
-            val userId = parts[0]
-            val walletIndex = parts[1].toInt()
-
-            // Re-derivar a chave (determinística)
-            val keyPair = cryptoService.derivePrivateKeyHD(
-                userId = userId,
-                walletIndex = walletIndex
-            )
-
-            val credentials = Credentials.create(keyPair)
-
-            // Validação de segurança
-            require(credentials.address.equals(request.from, ignoreCase = true)) {
-                "Security error: Address mismatch!"
-            }
-
-            // Obter nonce
-            val nonce = request.nonce?.let { BigInteger.valueOf(it) }
-                ?: throw InvalidTransactionException("Nonce é obrigatório")
-
-            // Criar e assinar transação
-            val rawTransaction = RawTransaction.createTransaction(
-                nonce,
-                BigInteger.valueOf(gasPrice),
-                BigInteger.valueOf(request.gasLimit ?: gasLimit),
-                request.to,
-                BigInteger(request.value ?: "0"),
-                request.data ?: ""
-            )
-
-            val signedMessage = TransactionEncoder.signMessage(
-                rawTransaction,
-                chainId,
-                credentials
-            )
-
-            val hexValue = Numeric.toHexString(signedMessage)
-            val txHash = Hash.sha3(hexValue)
-
-            logger.info { "Transaction signed: $txHash" }
-
-            return SignTransactionResponse(
-                signedTransaction = hexValue,
-                transactionHash = txHash,
-                from = request.from,
-                to = request.to,
-                nonce = nonce.toLong()
-            )
-
-        } catch (e: CryptoVaultException) {
-            throw e
-        } catch (e: Exception) {
-            logger.error(e) { "Failed to sign transaction" }
-            throw TransactionSigningException("Failed to sign transaction", e)
-        }
-
-
-    }
-
-
-    private fun generateSecureRandomSalt(): String {
-        val random = java.security.SecureRandom()
-        val bytes = ByteArray(32)
-        random.nextBytes(bytes)
-        return java.util.Base64.getEncoder().encodeToString(bytes)
     }
 }
