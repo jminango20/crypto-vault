@@ -13,35 +13,23 @@ import java.time.Duration
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Enforces per-client rate limits on endpoints annotated with [@RateLimit][RateLimit].
+ *
+ * Clients are identified by the X-User-Id header when present (authenticated requests),
+ * falling back to the originating IP address for unauthenticated traffic.
+ * Throttled requests receive HTTP 429 with a Retry-After header.
+ */
 @Component
-class RateLimitInterceptor(
-    private val rateLimitConfig: RateLimitConfig
-) : HandlerInterceptor {
+class RateLimitInterceptor(private val rateLimitConfig: RateLimitConfig) : HandlerInterceptor {
 
-    override fun preHandle(
-        request: HttpServletRequest,
-        response: HttpServletResponse,
-        handler: Any
-    ): Boolean {
+    override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
+        if (handler !is HandlerMethod) return true
 
-        if (handler !is HandlerMethod) {
-            logger.debug { "Handler não é um método, ignorando rate limit" }
-            return true
-        }
-
-        val rateLimit = handler.getMethodAnnotation(RateLimit::class.java)
-
-        if (rateLimit == null) {
-            logger.debug { "Método sem @RateLimit, ignorando" }
-            return true
-        }
+        val rateLimit = handler.getMethodAnnotation(RateLimit::class.java) ?: return true
 
         val clientKey = getClientIdentifier(request)
-
-        logger.debug {
-            "Verificando rate limit para $clientKey: " +
-                    "${rateLimit.maxRequests} req/${rateLimit.durationSeconds}s"
-        }
+        logger.debug { "Rate limit check for $clientKey on ${request.requestURI}" }
 
         val bucket = rateLimitConfig.resolveBucket(
             key = clientKey,
@@ -49,62 +37,33 @@ class RateLimitInterceptor(
             duration = Duration.ofSeconds(rateLimit.durationSeconds)
         )
 
-        if (bucket.tryConsume(1)) {
-            val tokensLeft = bucket.availableTokens
-
-            logger.debug { "Requisição permitida para $clientKey (tokens restantes: $tokensLeft)" }
-
+        return if (bucket.tryConsume(1)) {
             response.addHeader("X-RateLimit-Limit", rateLimit.maxRequests.toString())
-            response.addHeader("X-RateLimit-Remaining", tokensLeft.toString())
-
-            return true
+            response.addHeader("X-RateLimit-Remaining", bucket.availableTokens.toString())
+            response.addHeader("X-RateLimit-Reset", rateLimit.durationSeconds.toString())
+            true
         } else {
-            logger.warn { "Rate limit excedido para $clientKey em ${request.requestURI}" }
-
-            // Retornar erro 429 (Too Many Requests)
+            logger.warn { "Rate limit exceeded for $clientKey on ${request.requestURI}" }
             response.status = HttpStatus.TOO_MANY_REQUESTS.value()
             response.contentType = "application/json;charset=UTF-8"
-            response.writer.write("""
-                {
-                    "success": false,
-                    "error": "Muitas requisições. Tente novamente em ${rateLimit.durationSeconds} segundos.",
-                    "retryAfter": ${rateLimit.durationSeconds}
-                }
-            """.trimIndent())
-
-            return false
+            response.addHeader("Retry-After", rateLimit.durationSeconds.toString())
+            response.writer.write("""{"success":false,"error":"Rate limit exceeded. Retry in ${rateLimit.durationSeconds} seconds.","retryAfter":${rateLimit.durationSeconds}}""")
+            false
         }
     }
 
-    /**
-     * Identifica o cliente pela requisição
-     */
     private fun getClientIdentifier(request: HttpServletRequest): String {
-
         val userId = request.getHeader("X-User-Id")
-        if (!userId.isNullOrBlank()) {
-            return "user:$userId"
-        }
-
-        val ip = getClientIP(request)
-        return "ip:$ip"
+        if (!userId.isNullOrBlank()) return "user:$userId"
+        return "ip:${getClientIP(request)}"
     }
 
-    /**
-     * Obtém o IP real do cliente (considerando proxies/load balancers)
-     */
     private fun getClientIP(request: HttpServletRequest): String {
-
-        // Tentar pegar o IP do header X-Forwarded-For (quando há proxy)
+        // X-Forwarded-For contains "client, proxy1, proxy2" — take the first entry (real client).
         val xForwardedFor = request.getHeader("X-Forwarded-For")
-
-        return if (!xForwardedFor.isNullOrBlank()) {
-            // X-Forwarded-For pode ter múltiplos IPs: "client, proxy1, proxy2"
-            // Pegamos o primeiro (cliente real)
-            xForwardedFor.split(",")[0].trim()
-        } else {
-            // Sem proxy, pegar IP direto
+        return if (!xForwardedFor.isNullOrBlank())
+            xForwardedFor.split(",").firstOrNull()?.trim() ?: request.remoteAddr
+        else
             request.remoteAddr ?: "unknown"
-        }
     }
 }

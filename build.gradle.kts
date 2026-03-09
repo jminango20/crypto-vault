@@ -65,6 +65,14 @@ dependencies {
 	implementation("com.bucket4j:bucket4j-core:8.7.0")
 	implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
 	implementation("javax.cache:cache-api:1.1.1")
+
+	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+
+	testImplementation("com.h2database:h2")
+}
+
+springBoot {
+	mainClass.set("com.jminango.cryptovault.CryptovaultApplicationKt")
 }
 
 tasks.withType<KotlinCompile> {

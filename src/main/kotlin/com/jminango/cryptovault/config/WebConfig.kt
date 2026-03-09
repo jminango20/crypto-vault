@@ -11,7 +11,9 @@ class WebConfig(
 ) : WebMvcConfigurer {
 
     /**
-     * Registra o interceptor no Spring MVC
+     * Registra interceptor de rate limiting
+     * Aplica rate limit em todos endpoints /api/v1/
+     * exceto health check e autenticação
      */
     override fun addInterceptors(registry: InterceptorRegistry) {
         registry.addInterceptor(rateLimitInterceptor)
