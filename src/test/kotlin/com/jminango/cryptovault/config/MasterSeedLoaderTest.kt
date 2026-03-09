@@ -7,11 +7,15 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.TestPropertySource
+import java.util.Base64
 
 @SpringBootTest
+@ActiveProfiles("test")
 @TestPropertySource(properties = [
-    "cryptovault.master.seed=BASE64:dGVzdC1zZWVkLWZvci10ZXN0aW5n", // "test-seed-for-testing" em Base64
+    // Plain-text seed >= 32 bytes so the Spring context initialises successfully.
+    "cryptovault.master.seed=test-seed-for-testing-min-32-bit",
     "cryptovault.master.password=test-password"
 ])
 class MasterSeedLoaderTest {
@@ -31,33 +35,38 @@ class MasterSeedLoaderTest {
 
     @Test
     fun `deve carregar master seed em Base64`() {
-        val masterSeed = loader.masterSeed()
+        // Create a separate loader to test Base64 decoding; seed must be >= 32 bytes.
+        val plainSeed = "test-seed-for-testing-min-32-bit"  // exactly 32 bytes
+        val base64Seed = "BASE64:${Base64.getEncoder().encodeToString(plainSeed.toByteArray())}"
+
+        val base64Loader = MasterSeedLoader(base64Seed, masterPassword)
+        val masterSeed = base64Loader.masterSeed()
+
         assertNotNull(masterSeed)
-        assertTrue(masterSeed.getBytes().size > 0)
-        assertEquals("test-seed-for-testing", String(masterSeed.getBytes()))
+        assertEquals(plainSeed, String(masterSeed.getBytes()))
     }
 
     @Test
     fun `deve descriptografar master seed`() {
-        // Primeiro, criptografa um seed de teste
         val plainSeed = "seed-para-teste-de-descriptografia"
         val encrypted = EncryptionServiceTest.encryptForTest(plainSeed, "test-password")
 
         val loaderWithEnc = MasterSeedLoader("ENC:$encrypted", "test-password")
         val masterSeed = loaderWithEnc.masterSeed()
+
         assertNotNull(masterSeed)
         assertEquals(plainSeed, String(masterSeed.getBytes()))
     }
 
     @Test
     fun `deve falhar com senha errada`() {
-        val plainSeed = "seed-teste"
+        val plainSeed = "seed-para-teste-de-descriptografia"
         val encrypted = EncryptionServiceTest.encryptForTest(plainSeed, "senha-correta")
 
-        val loader = MasterSeedLoader("ENC:$encrypted", "senha-errada")
+        val badLoader = MasterSeedLoader("ENC:$encrypted", "senha-errada")
 
         assertThrows<RuntimeException> {
-            loader.masterSeed()
+            badLoader.masterSeed()
         }
     }
 }

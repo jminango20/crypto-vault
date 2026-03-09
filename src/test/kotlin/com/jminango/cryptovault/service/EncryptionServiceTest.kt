@@ -1,5 +1,6 @@
 package com.jminango.cryptovault.service
 
+import com.jminango.cryptovault.exception.CryptographyException
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -14,11 +15,12 @@ import javax.crypto.spec.SecretKeySpec
 class EncryptionServiceTest {
 
     companion object {
-        // ✅ Use o MESMO salt do MasterSeedLoader
         private const val MASTER_SEED_SALT = "CryptoVault-MasterSeed-Salt-2025"
 
+        // This helper replicates MasterSeedLoader's own CBC encryption (not EncryptionService).
+        // Used only by MasterSeedLoaderTest to generate test-encrypted seeds.
         fun encryptForTest(plainText: String, password: String): String {
-            val salt = MASTER_SEED_SALT.toByteArray() // 👈 MESMO SALT!
+            val salt = MASTER_SEED_SALT.toByteArray()
             val spec = PBEKeySpec(password.toCharArray(), salt, 100_000, 256)
             val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
             val keyBytes = factory.generateSecret(spec).encoded
@@ -47,7 +49,7 @@ class EncryptionServiceTest {
 
         assertEquals(original, decrypted)
         assertNotEquals(original, encrypted)
-        assertTrue(encrypted.startsWith("ENC:") || encrypted.length > original.length)
+        assertTrue(encrypted.length > original.length)
     }
 
     @Test
@@ -68,6 +70,38 @@ class EncryptionServiceTest {
         val encrypted1 = encryptionService.encrypt(text)
         val encrypted2 = encryptionService.encrypt(text)
 
-        assertNotEquals(encrypted1, encrypted2) // por causa do IV aleatório
+        assertNotEquals(encrypted1, encrypted2) // random IV per encryption
+    }
+
+    @Test
+    fun `deve criptografar e descriptografar com AAD corretamente`() {
+        val plainText = "42"           // derivation index
+        val aad = "user-alice"         // userId bound as AAD
+
+        val encrypted = encryptionService.encrypt(plainText, aad = aad)
+        val decrypted = encryptionService.decrypt(encrypted, aad = aad)
+
+        assertEquals(plainText, decrypted)
+    }
+
+    @Test
+    fun `deve falhar ao descriptografar com AAD incorreto`() {
+        val plainText = "42"
+        val encrypted = encryptionService.encrypt(plainText, aad = "user-alice")
+
+        // Simulates swapping this ciphertext into user-bob's record
+        assertThrows<CryptographyException> {
+            encryptionService.decrypt(encrypted, aad = "user-bob")
+        }
+    }
+
+    @Test
+    fun `deve falhar ao descriptografar sem AAD quando criptografado com AAD`() {
+        val plainText = "42"
+        val encrypted = encryptionService.encrypt(plainText, aad = "user-alice")
+
+        assertThrows<CryptographyException> {
+            encryptionService.decrypt(encrypted) // no AAD supplied
+        }
     }
 }

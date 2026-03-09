@@ -28,7 +28,7 @@ class ArchitectureTest {
         assertEquals("test", decrypted)
 
         // 2. CryptoService
-        val key1 = cryptoService.derivePrivateKeyHD("user1", 0)
+        val key1 = cryptoService.derivePrivateKeyHD(0)
         assertNotNull(key1)
 
         // 3. WalletService usa ambos sem problemas
